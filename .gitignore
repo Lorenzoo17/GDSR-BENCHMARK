@@ -1,0 +1,17 @@
+# Repository e pesi delle reti: si scaricano con setup (download_models.py)
+external/
+weights/
+
+# Dataset TOFDSR: licenza solo accademica, non va ridistribuito (si scarica con download_tofdsr)
+datasets/
+tofdsr_tmp_*/
+
+# Risultati delle misure (togli questa riga se vuoi pubblicarli)
+results/
+
+# File temporanei
+__pycache__/
+*.pyc
+*.part
+config.json.bak
+log_benchmark.txt

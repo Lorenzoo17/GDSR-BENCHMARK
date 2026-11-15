@@ -1,0 +1,11 @@
+# PyTorch e torchvision NON sono qui: vanno installati con CUDA dal sito ufficiale
+#   https://pytorch.org/get-started/locally/
+# (con "pip install torch" su Windows arriva la versione solo-CPU).
+numpy
+pillow
+opencv-python
+scipy
+psutil
+tqdm
+kornia            # DCTNet
+nvidia-ml-py      # energia, potenza e stato della GPU (NVML)

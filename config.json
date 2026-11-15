@@ -1,0 +1,41 @@
+{
+  "_nota": "Percorsi relativi = relativi a questa cartella (benchmark_gdsr). Su un altro PC cambia solo i percorsi dei dataset.",
+
+  "tofdsr": {
+    "root": "../TOFDSR/TOFDSR",
+    "test_list": ""
+  },
+
+  "redwood": {
+    "rgbd_root": "../code/redwood",
+    "target_root": "../code/redwood_target_depths",
+    "scenes": ["apartment", "bedroom", "boardroom", "lobby", "loft"],
+    "scale": 4,
+    "min_coverage": 30.0,
+    "max_frames_per_scene": 100
+  },
+
+  "weights": {
+    "_nota": "Checkpoint per dataset. Se manca, la rete gira con pesi casuali: latenza, memoria ed energia restano valide, la RMSE si prende dal paper (colonna pubbl.).",
+    "tofdsr": {
+      "dornet_t": "external/DORNet/checkpoints/TOFDSR_T.pth",
+      "dornet":   "external/DORNet/checkpoints/TOFDSR.pth",
+      "ducos":    "external/DuCos/ckpts/RealTOFDSR.pth.tar"
+    },
+    "redwood": {
+      "dctnet":   "external/DCTNet/models/DCTNet_RealScene.pth",
+      "dornet_t": "external/DORNet/checkpoints/RGBDD_T.pth",
+      "dornet":   "external/DORNet/checkpoints/RGBDD.pth",
+      "ducos":    "external/DuCos/ckpts/RealRGBDD.pth.tar"
+    },
+    "depth_anything_v2_vits": "weights/depth_anything_v2_vits.pth"
+  },
+
+  "sgnet_num_feats": 24,
+
+  "normalization": {
+    "_nota": "Facoltativo: sovrascrive la normalizzazione della depth di una rete. \"minmax\" = min-max per immagine; un numero = millimetri che valgono 1.0 (5000 = d_mm/5000). Default: DORNet e DuCos 5000, le altre min-max.",
+    "tofdsr":  {},
+    "redwood": {"ducos": "minmax"}
+  }
+}
