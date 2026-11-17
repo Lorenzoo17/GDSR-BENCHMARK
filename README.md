@@ -5,6 +5,125 @@ Super-Resolution Across GPU Architectures*. Implementa il protocollo della Sezio
 (latenza, memoria, energia, precisione numerica) sul test reale di TOFDSR ×4 (560 immagini).
 Funziona uguale su Windows e Ubuntu.
 
+## Guida passo per passo
+
+I comandi sono uguali su Ubuntu e Windows; dove cambiano ci sono entrambe le versioni.
+Su Windows usa l'**Anaconda Prompt**, non il prompt normale.
+
+### 0. Cosa serve prima
+
+- **Driver NVIDIA** recente. Controllo: `nvidia-smi` deve mostrare la GPU e, in alto a
+  destra, "CUDA Version" **12.1 o superiore** (driver ≥ 525). Se il comando non esiste, il
+  driver va installato (sui server, dall'amministratore).
+- **Conda** (Anaconda o Miniconda) e **git**.
+- **La cartella del benchmark**, da GitHub (`git clone <url>`) o copiata a mano.
+  Tutti i comandi seguenti si lanciano **dentro questa cartella**.
+
+Il CUDA Toolkit **non** serve: PyTorch include già le sue librerie CUDA.
+
+### 1. Crea l'ambiente conda
+
+```bash
+conda create -n gdsrbench python=3.10 -y
+conda activate gdsrbench
+```
+
+D'ora in poi, **ogni volta** che apri un nuovo terminale: `conda activate gdsrbench`.
+
+### 2. Installa PyTorch con CUDA
+
+Sempre le stesse versioni su tutte le macchine (il paper dichiara software identico):
+
+```bash
+pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cu121
+```
+
+Controllo:
+
+```bash
+python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
+Deve stampare `2.3.1+cu121 True` e il nome della GPU. Se stampa `+cpu` o `False`, vedi
+[Problemi frequenti](#problemi-frequenti).
+
+### 3. Installa gli altri pacchetti
+
+**Dopo** PyTorch (se lo fai prima, `kornia` si porta dietro un PyTorch solo-CPU):
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Scarica il dataset TOFDSR
+
+| Windows | Ubuntu |
+|---|---|
+| `download_tofdsr.bat --solo-test` | `bash download_tofdsr.sh --solo-test` |
+
+Lo mette in `datasets/TOFDSR` e aggiorna da solo `config.json`. `--solo-test` estrae solo le
+560 immagini di test, che sono tutto ciò che serve. Se il dataset c'è già e `config.json`
+punta lì, non fa niente.
+
+Se Google Drive rifiuta il download, lo script stampa i link ufficiali (Google Drive e
+Baidu, codice `nust`): scarica l'archivio a mano e poi
+`download_tofdsr.bat --da-archivio <file>` (oppure `--da-cartella <cartella estratta>`).
+
+Licenza del dataset: solo uso accademico e non commerciale; va citato Yan et al., CVPR 2024
+(Tri-Perspective View Decomposition).
+
+### 5. Scarica le reti
+
+| | Windows | Ubuntu |
+|---|---|---|
+| reti + pesi disponibili | `setup.bat` | `bash setup.sh` |
+| reti senza pesi (tutte a pesi casuali) | `setup.bat --no-weights` | `bash setup.sh --no-weights` |
+
+Clona i repository ufficiali in `external/` e, senza `--no-weights`, scarica i pesi di DuCos
+e Depth Anything V2 in `weights/` e `external/DuCos/ckpts/`. Alla fine controlla PyTorch,
+CUDA e NVML: per misurare l'energia deve comparire `[ok] NVML: contatore di energia
+disponibile`. Si può rilanciare quando vuoi: scarica solo ciò che manca.
+
+### 6. Prova veloce (pochi minuti)
+
+Prima della corsa lunga, controlla che tutto funzioni su 20 immagini:
+
+| Windows | Ubuntu |
+|---|---|
+| `run_tofdsr.bat --device cuda:0 --limit 20 --repeats 1 --energy-seconds 10` | `bash run_tofdsr.sh --device cuda:0 --limit 20 --repeats 1 --energy-seconds 10` |
+
+Alla fine deve stampare le due tabelle con tutte e dieci le reti e nessuna riga `FALLITO`
+(l'unica eccezione attesa è SGNet in FP16, vedi sotto).
+
+### 7. Corsa completa per il paper
+
+| Windows | Ubuntu |
+|---|---|
+| `run_paper.bat --device cuda:0` | `bash run_paper.sh --device cuda:0` |
+
+Esegue tutto il protocollo prima in FP32 (riferimento) e poi in FP16. Per far girare **tutte**
+le reti con pesi casuali, come nella campagna sulla RTX 3090, aggiungi
+`--ckpt dornet=nessuno --ckpt dornet_t=nessuno` (DORNet e DORNet-T sono le uniche reti di cui
+il setup trova sempre i pesi, perché stanno nel loro repository).
+
+Durata: circa **5–8 minuti per rete**, quindi circa un'ora per precisione e due ore in tutto.
+Durante la misura **non usare la GPU per altro**: tutto finisce nel contatore di energia.
+Su un server via SSH, lancia in modo che non si interrompa se chiudi la connessione:
+
+```bash
+nohup bash run_paper.sh --device cuda:0 > log_benchmark.txt 2>&1 &
+tail -f log_benchmark.txt
+```
+
+### 8. Risultati
+
+Alla fine di ogni precisione vengono stampate due tabelle (accuratezza/dimensioni e costo
+per immagine) e salvati in `results/`:
+
+- `tofdsr_<precisione>_<gpu>_<data>.csv`: una riga per rete, pronta per le tabelle del paper;
+- `tofdsr_<precisione>_<gpu>_<data>.json`: tutto, comprese latenza e RMSE di ogni immagine
+  e lo stato della GPU (driver, potenza, clock, temperatura).
+
 ## Reti incluse
 
 Criterio: **RMSE pubblicata sul TOFDSR reale + codice ufficiale disponibile**. I pesi
@@ -29,75 +148,30 @@ Valori pubblicati: Tab. 1 di DORNet (CVPR 2025) per le prime otto reti; DuCos da
 **Escluse:** SFG (nessun codice pubblico trovato), DJF e DJFR (solo MATLAB/MatConvNet),
 CUNet (codice non trovato), PromptDA e PriorDA (nessuna RMSE pubblicata su TOFDSR).
 
-## 1. Una volta sola: ambiente
-
-PyTorch va installato **con CUDA** dal sito ufficiale:
+### Comandi utili
 
 ```bash
-# esempio CUDA 12.1 — comando giusto su https://pytorch.org/get-started/locally/
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+bash run_tofdsr.sh --device cuda:0 --models sgnet dctnet            # solo alcune reti
+bash run_tofdsr.sh --device cuda:0 --precision fp16                 # solo FP16
+bash run_tofdsr.sh --device cuda:0 --ckpt fdsr=/percorso/pesi.pth   # pesi tuoi per una rete
+python run_benchmark.py --help                                      # tutte le opzioni
 ```
 
-Poi il setup (pacchetti + download delle reti):
+Per rilanciare una sola rete fallita non serve rifare tutto: `--models <rete>` con la stessa
+precisione, poi copia la sua riga nel `.csv` della corsa completa.
 
-| Windows | Ubuntu |
-|---|---|
-| `setup.bat --pip` | `bash setup.sh --pip` |
+### Problemi frequenti
 
-Su Windows lancia i `.bat` da un prompt con l'ambiente conda attivo (o imposta la variabile
-`PYTHON`). Il setup si può rilanciare quando vuoi: scarica solo ciò che manca. Le cartelle
-di PromptDA, PriorDA e i loro pesi, se le avevi scaricate, non servono più: puoi cancellare
-`external/PromptDA`, `external/PriorDA`, `weights/promptda`, `weights/priorda`.
-
-## 2. Dataset TOFDSR
-
-Se il dataset non c'è, lo scarica e lo sistema uno script:
-
-| Windows | Ubuntu |
-|---|---|
-| `download_tofdsr.bat --solo-test` | `bash download_tofdsr.sh --solo-test` |
-
-Scarica l'archivio ufficiale da Google Drive (pagina del progetto TOFDC), lo estrae in
-`datasets/TOFDSR`, controlla che ci siano le 560 immagini di test e aggiorna `tofdsr.root`
-in `config.json` (copia del vecchio in `config.json.bak`). `--solo-test` estrae solo il test,
-che è tutto ciò che serve al benchmark; senza, estrae anche il train. Se `config.json`
-punta già a un TOFDSR completo, non fa niente.
-
-Se Google Drive rifiuta il download (succede con i file molto scaricati), scarica l'archivio
-a mano dal link di Google Drive o di Baidu (codice `nust`) della pagina del progetto e poi:
-`download_tofdsr.bat --da-archivio C:\percorso\archivio.zip`. Con una cartella già estratta:
-`--da-cartella`. Altra destinazione: `--dest`.
-
-Licenza del dataset: solo uso accademico e non commerciale; va citato Yan et al., CVPR 2024
-(Tri-Perspective View Decomposition).
-
-In alternativa il percorso si imposta a mano in `config.json` → `tofdsr.root` (relativo a
-questa cartella o assoluto), oppure con `--tofdsr-root`. La cartella deve contenere
-`Test/RGB`, `Test/GT`, `Test/LR_Filled` e, se c'è, `TOFDSR_Test.txt`.
-
-## 3. Eseguire
-
-| | Windows | Ubuntu |
+| sintomo | causa | soluzione |
 |---|---|---|
-| protocollo completo, FP32 (riferimento) | `run_tofdsr.bat` | `bash run_tofdsr.sh` |
-| FP32 **e** FP16, una dopo l'altra | `run_paper.bat` | `bash run_paper.sh` |
-
-```bash
-run_tofdsr.bat --limit 20 --repeats 1 --energy-seconds 10    # prova veloce (minuti)
-run_tofdsr.bat --models dornet ducos                         # solo alcune reti
-run_tofdsr.bat --precision fp16                              # seconda configurazione
-run_tofdsr.bat --ckpt fdsr=C:\pesi\fdsr_tofdsr.pth           # se hai pesi tuoi per una rete
-```
-
-Durata del protocollo completo: per ogni rete 10 immagini di warm-up, 3 × 560 misure di
-latenza, poi 3 cicli di energia da ≥ 60 s, ognuno preceduto da 5 + 10 s di riposo. Conta
-circa **5–8 minuti per rete**, quindi circa un'ora per GPU e per precisione (DKN e SUFT sono
-le più lente). Durante la misura **non usare la GPU per altro**: tutto finisce nel contatore
-di energia.
-
-Alla fine stampa due tabelle (accuratezza/dimensioni e costo per immagine) e salva
-`results/tofdsr_<precisione>_<gpu>_<data>.json` (tutto, comprese latenza e RMSE di ogni
-immagine e lo stato della GPU) e `.csv` (una riga per rete, pronta per le tabelle del paper).
+| `nvidia-smi` non funziona | driver NVIDIA assente | va installato (≥ 525) |
+| torch stampa `+cpu`, o `cuda.is_available()` è `False` | PyTorch solo-CPU (spesso perché `requirements.txt` è stato installato prima di PyTorch) | `pip uninstall -y torch torchvision`, poi ripeti il passo 2 |
+| `cuda.is_available()` è `False` con torch `+cu121` | driver troppo vecchio | aggiorna il driver ("CUDA Version" ≥ 12.1 in `nvidia-smi`) |
+| `expected a torch.device with a specified index` | dispositivo senza indice | aggiungi `--device cuda:0` |
+| `No module named ...` per una rete | pacchetto mancante | `pip install -r requirements.txt` nell'ambiente attivo |
+| niente energia, `NVML non disponibile` | manca `nvidia-ml-py` | `pip install nvidia-ml-py` |
+| SGNet `FALLITO` in FP16 | la FFT in FP16 accetta solo lati potenza di 2, e 384 non lo è | atteso: in FP16 SGNet si riporta come n/a |
+| la potenza a riposo sembra troppo alta (> 100 W) | la GPU non è ancora tornata a riposo dopo il carico | `--settle-seconds 60`; sui server attiva `sudo nvidia-smi -pm 1` |
 
 ## Cosa misura (corrispondenza con il paper)
 
