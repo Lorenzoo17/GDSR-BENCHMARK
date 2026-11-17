@@ -9,3 +9,4 @@ psutil
 tqdm
 kornia            # DCTNet
 nvidia-ml-py      # energia, potenza e stato della GPU (NVML)
+matplotlib
